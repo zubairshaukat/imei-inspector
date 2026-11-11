@@ -15,7 +15,7 @@ Free, self-hosted IMEI checker. Decodes any IMEI in the browser — no paid API,
 Manufacture date and warranty are not stored inside an IMEI; they come from the device serial and the manufacturer.
 
 ## Install on Android
-**App (APK):** every push to `main` builds an APK with GitHub Actions. Open the repo's **Actions** tab, pick the latest *Build Android APK* run, and download `imei-inspector-apk`. Releases also get the APK attached. The APK bundles the full database, so it works offline.
+**App (APK):** [Download the latest APK](https://github.com/zubairshaukat/imei-inspector/releases/latest/download/imei-inspector.apk). Open it on your phone and tap Install. Every push to `main` builds a new APK and publishes it under **Releases**; each one installs over the previous version. The APK bundles the full database, so it works offline.
 
 **From the website:** open the site in Chrome on Android, then menu > *Add to Home screen* / *Install app*.
 

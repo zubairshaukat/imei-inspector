@@ -61,3 +61,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" imei-inspector.apk --clobber
+
+      - name: Publish APK as a new release
+        if: github.event_name != 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v1.1.${{ github.run_number }}
+        run: |
+          gh release create "$TAG" imei-inspector.apk \
+            --target "${{ github.sha }}" \
+            --title "IMEI Inspector $TAG" \
+            --notes "Android app build from commit ${GITHUB_SHA::7}. Download imei-inspector.apk below and open it on your phone to install. It installs over any earlier version." \
+            --latest
