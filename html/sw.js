@@ -1,5 +1,5 @@
 // IMEI Inspector service worker: app shell is network-first, TAC data is cache-first.
-const VERSION = "imei-v1.1.0";
+const VERSION = "imei-v1.2.0";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

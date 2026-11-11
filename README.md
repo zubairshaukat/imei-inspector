@@ -4,7 +4,13 @@ Free, self-hosted IMEI checker. Decodes any IMEI in the browser — no paid API,
 
 **Live:** https://imei.witsols.com
 
-## What it shows
+## What it does
+**Check** — decode any IMEI.
+**Authenticity** — cross-checks IMEI 1, IMEI 2, the box label, the model it's sold as, its model number, RAM and storage, then gives a verdict: *Likely genuine*, *Suspicious* or *Likely fake*. In the Android app it also reads the phone's own maker, model number, RAM, storage, screen and root/emulator signs.
+**Scan** — read IMEI barcodes with the camera (box label, SIM tray, *#06# screen) or from a photo.
+**Bulk** — check up to 500 IMEIs at once and copy the results as CSV.
+
+## What a check shows
 - Checksum validation (Luhn), with auto-completion of 14-digit IMEIs and IMEISV support
 - TAC, serial number (SNR), check digit and issuing body
 - Brand, model, model number, market/region and release year from a 275,000-model TAC database
@@ -35,8 +41,17 @@ cd /opt/imei-inspector && docker compose up -d
 ```
 Then add a proxy host in Nginx Proxy Manager forwarding to `imei-inspector:80`.
 
-## Updating the database
-Replace the files in `html/tac/`. Changes are live immediately; no restart needed.
+## Database updates (automatic)
+`.github/workflows/update-database.yml` runs daily: it downloads the latest TAC list, rebuilds `html/tac/`, commits only when something changed, and then builds a new APK.
+
+The Android app reads the newest database from `https://imei.witsols.com/tac/` whenever the phone is online, and falls back to its built-in copy offline — so new models appear without reinstalling.
+
+On the server, pull the changes every night (crontab -e):
+```
+30 3 * * * cd /opt/imei-inspector && git pull -q && docker exec imei-inspector nginx -s reload
+```
+
+To rebuild the database by hand: `python3 scripts/build_tac.py tac_full.csv html/tac`.
 
 ## Credits
-TAC data from [MoazEb/tac-database](https://github.com/MoazEb/tac-database) (MIT licence, October 2026), see `html/tac/LICENSE-tac-database.txt`.
+TAC data from [MoazEb/tac-database](https://github.com/MoazEb/tac-database) (MIT licence), see `html/tac/LICENSE-tac-database.txt`. Barcode decoding by [ZXing](https://github.com/zxing-js/library) (Apache 2.0), see `html/vendor/LICENSE-zxing.txt`.

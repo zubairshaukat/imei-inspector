@@ -1,0 +1,48 @@
+name: Update phone database
+
+on:
+  schedule:
+    - cron: '15 1 * * *'   # daily, 05:15 Oman time
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the latest TAC list
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -fsSL -o /tmp/tac_full.csv https://raw.githubusercontent.com/MoazEb/tac-database/main/tac_full.csv
+          echo "SRC=$(gh api repos/MoazEb/tac-database/commits/main --jq '.sha[0:7]')" >> "$GITHUB_ENV"
+
+      - name: Rebuild the database files
+        run: python3 scripts/build_tac.py /tmp/tac_full.csv html/tac "$SRC"
+
+      - name: Commit if anything changed
+        id: commit
+        run: |
+          if git diff --quiet -- html/tac; then
+            echo "No new models today."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          COUNT=$(python3 -c "import json;print(json.load(open('html/tac/meta.json'))['count'])")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add html/tac
+          git commit -m "Update phone database: $COUNT models (source $SRC)"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build a new APK with the updated database
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run android-apk.yml --ref main

@@ -15,8 +15,8 @@ android {
         applicationId 'com.witsols.imeiinspector'
         minSdk 24
         targetSdk 34
-        versionCode((System.getenv('VERSION_CODE') ?: '2') as int)
-        versionName System.getenv('VERSION_NAME') ?: '1.1.0'
+        versionCode((System.getenv('VERSION_CODE') ?: '3') as int)
+        versionName System.getenv('VERSION_NAME') ?: '1.2.0'
     }
 
     signingConfigs {
