@@ -1,0 +1,53 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Signing: uses GitHub secrets when set (ANDROID_KEYSTORE_B64 etc.), otherwise the
+// bundled key in signing/, so every build carries the same signature and installs as an update.
+def ciKeystore = file('release.jks')
+def bundledKeystore = file('../signing/imei-inspector.jks')
+
+android {
+    namespace 'com.witsols.imeiinspector'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.witsols.imeiinspector'
+        minSdk 24
+        targetSdk 34
+        versionCode((System.getenv('VERSION_CODE') ?: '2') as int)
+        versionName System.getenv('VERSION_NAME') ?: '1.1.0'
+    }
+
+    signingConfigs {
+        release {
+            if (ciKeystore.exists()) {
+                storeFile ciKeystore
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            } else {
+                storeFile bundledKeystore
+                storePassword 'imeiinspector'
+                keyAlias 'imei-inspector'
+                keyPassword 'imeiinspector'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+}
