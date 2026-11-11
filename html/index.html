@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>IMEI Inspector</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a single working column — scanner bar on top, decoded label + device sheet below; bulk mode as a second tab */
+:root{
+  --bg:#eef1f5; --panel:#ffffff; --ink:#141a26; --muted:#5b6578; --line:#d7dce5;
+  --accent:#2343c4; --accent-soft:#e3e8fb;
+  --ok:#137a4b; --ok-soft:#dff3e9; --bad:#b4322a; --bad-soft:#fbe4e1; --warn:#8a5a00; --warn-soft:#fbefd6;
+  --seg-tac:#2343c4; --seg-snr:#7a3fb8; --seg-cd:#137a4b; --seg-rbi:#c2541b;
+  --f-head:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e121b; --panel:#161c28; --ink:#e6e9f0; --muted:#98a2b6; --line:#2a3242;
+  --accent:#8ea4ff; --accent-soft:#1f2a4d;
+  --ok:#5fd09a; --ok-soft:#12301f; --bad:#ff8a80; --bad-soft:#3a1714; --warn:#f0c060; --warn-soft:#352812;
+  --seg-tac:#8ea4ff; --seg-snr:#c79bff; --seg-cd:#5fd09a; --seg-rbi:#ff9a62; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e121b; --panel:#161c28; --ink:#e6e9f0; --muted:#98a2b6; --line:#2a3242;
+  --accent:#8ea4ff; --accent-soft:#1f2a4d;
+  --ok:#5fd09a; --ok-soft:#12301f; --bad:#ff8a80; --bad-soft:#3a1714; --warn:#f0c060; --warn-soft:#352812;
+  --seg-tac:#8ea4ff; --seg-snr:#c79bff; --seg-cd:#5fd09a; --seg-rbi:#ff9a62; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-body);margin:0}
+.wrap{max-width:980px;margin:0 auto;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+h1{font:700 30px/1.1 var(--f-head);margin:0;letter-spacing:-.01em}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);margin:4px 0 0;max-width:60ch}
+.tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px}
+.tabs button{border:0;background:transparent;color:var(--muted);font:600 13px var(--f-body);padding:7px 14px;border-radius:7px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}
+.scan{display:grid;gap:10px}
+.scan label{font:600 12px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+#imei{flex:1 1 260px;min-width:0;font:500 24px/1 var(--f-mono);letter-spacing:.12em;padding:14px 16px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+#imei:focus{border-color:var(--accent);outline:none}
+.btn{font:600 14px var(--f-body);border-radius:9px;padding:0 18px;min-height:44px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.hint code{font-family:var(--f-mono);font-size:12.5px}
+.samples{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.chip{font:500 12.5px var(--f-mono);border:1px dashed var(--line);background:transparent;color:var(--ink);border-radius:6px;padding:3px 8px;cursor:pointer}
+/* the label strip */
+.label{display:grid;gap:14px}
+.strip{display:flex;flex-wrap:wrap;gap:10px;overflow-x:auto}
+.seg{display:grid;gap:6px}
+.digits{display:flex;gap:2px}
+.digits b{font:600 22px/1 var(--f-mono);width:1.35em;padding:9px 0;text-align:center;border-radius:5px;background:var(--bg);border-bottom:3px solid var(--c)}
+.seg small{font:600 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--c)}
+.seg em{font-style:normal;font-size:12px;color:var(--muted)}
+.status{display:inline-flex;align-items:center;gap:6px;font:600 13px var(--f-body);padding:4px 10px;border-radius:999px}
+.status.ok{background:var(--ok-soft);color:var(--ok)} .status.bad{background:var(--bad-soft);color:var(--bad)} .status.warn{background:var(--warn-soft);color:var(--warn)}
+.status::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.grid2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+h2{font:600 19px/1.2 var(--f-head);margin:0 0 4px}
+.model{font:700 26px/1.15 var(--f-head);margin:0;text-wrap:balance}
+.brand{font:600 12px var(--f-body);letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+dl{display:grid;grid-template-columns:minmax(120px,auto) minmax(0,1fr);gap:9px 16px;margin:16px 0 0}
+dt{color:var(--muted);font-size:13.5px}
+dd{margin:0;font-weight:500;min-width:0;overflow-wrap:anywhere}
+dd .mono{font-family:var(--f-mono);font-size:14px}
+dd .note{display:block;font-weight:400;font-size:13px;color:var(--muted)}
+.raw{margin-top:16px;padding:10px 12px;background:var(--bg);border-radius:8px;font:13px/1.5 var(--f-mono);color:var(--muted);overflow-wrap:anywhere}
+.alts{margin-top:10px;font-size:13px;color:var(--muted)}
+.side{display:grid;gap:16px;align-content:start}
+.side h3{font:600 15px var(--f-head);margin:0 0 6px;letter-spacing:.01em}
+.side p{margin:0 0 10px;font-size:13.5px;color:var(--muted)}
+.links{display:grid;gap:8px}
+.links a{display:flex;justify-content:space-between;gap:8px;align-items:center;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:14px;font-weight:500}
+.links a:hover{border-color:var(--accent);color:var(--accent)}
+.links a span{color:var(--muted);font-size:12px;font-weight:400}
+.serial input{width:100%;font:500 16px var(--f-mono);letter-spacing:.06em;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);text-transform:uppercase}
+.serial output{display:block;margin-top:8px;font-size:13.5px}
+.empty{color:var(--muted);text-align:center;padding:28px 10px}
+.hist{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+/* bulk */
+textarea{width:100%;min-height:150px;font:14px/1.6 var(--f-mono);padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);resize:vertical}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:720px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 11.5px var(--f-body);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--bg)}
+td.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:8px;font-size:14px;font-weight:500}
+footer{font-size:12.5px;color:var(--muted)}
+footer a{color:inherit}
+@media (prefers-reduced-motion:no-preference){.digits b{transition:background .2s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>IMEI <span>Inspector</span></h1>
+      <p class="sub">Free, offline decoding of any IMEI: brand, model, release year, TAC, serial and checksum, from a 275,000-model database.</p>
+    </div>
+    <div class="tabs" role="tablist">
+      <button id="tab-single" role="tab" aria-selected="true">Single check</button>
+      <button id="tab-bulk" role="tab" aria-selected="false">Bulk check</button>
+    </div>
+  </header>
+
+  <section id="view-single" class="grid" style="display:grid;gap:20px">
+    <form class="panel scan" id="form">
+      <label for="imei">IMEI number</label>
+      <div class="row">
+        <input id="imei" inputmode="numeric" autocomplete="off" maxlength="22" placeholder="15 digits — dial *#06#">
+        <button class="btn primary" type="submit">Check IMEI</button>
+      </div>
+      <p class="hint">Accepts 15-digit IMEI, 14 digits (check digit is calculated), or 16-digit IMEISV. Spaces and dashes are ignored.</p>
+      <div class="samples"><span>Examples:</span><button type="button" class="chip" data-s="358330275123908">358330275123908</button><button type="button" class="chip" data-s="350019960481527">350019960481527</button><button type="button" class="chip" data-s="863024071135772">863024071135772</button></div>
+    </form>
+
+    <div id="result"></div>
+
+    <div class="panel" id="histPanel" hidden>
+      <h3 style="font:600 15px var(--f-head);margin:0 0 8px">Recent checks on this device</h3>
+      <div class="hist" id="hist"></div>
+    </div>
+  </section>
+
+  <section id="view-bulk" hidden style="display:grid;gap:16px">
+    <div class="panel scan">
+      <label for="bulk">Paste IMEIs — one per line, or separated by commas or spaces</label>
+      <textarea id="bulk" spellcheck="false">358330275123908
+350019960481527
+863024071135772
+358330275123901</textarea>
+      <div class="row">
+        <button class="btn primary" id="runBulk" type="button">Check all</button>
+        <button class="btn" id="copyCsv" type="button" disabled>Copy results as CSV</button>
+        <span class="hint" id="bulkInfo" style="align-self:center"></span>
+      </div>
+    </div>
+    <div id="bulkOut"></div>
+  </section>
+
+  <footer>Device data: open TAC database (MIT licence, updated October 2026). Lookups run in your browser; IMEIs are not sent anywhere. Manufacture date and warranty are not stored inside an IMEI, so those come from the serial number and the manufacturer's own checker.</footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const shardCache = new Map();
+const RBI = {"00":"Test IMEI (lab use)","01":"CTIA (USA)","10":"CTIA (USA)","30":"Iridium","33":"DGPT (France)","35":"BABT (UK)","44":"BABT (UK)","45":"NTA (Denmark)","49":"BZT / BAPT (Germany)","50":"BZT ETS (Germany)","51":"Cetecom ICS (Germany)","52":"Cetecom (Germany)","53":"TÜV (Germany)","54":"Phoenix Test Lab (UK)","86":"TAF (China)","91":"MSAI (India)","98":"BABT (UK)","99":"GHA (multi-standard / CDMA)"};
+const UPPER_KEEP = new Set(["LG","HTC","ZTE","TCL","HMD","BLU","OPPO","IQOO","BBK","NEC","JVC","RIM","HP","ASUS","POCO"]);
+const WORD_MAP = {IPHONE:"iPhone",IPAD:"iPad",IPOD:"iPod",VIVO:"vivo",REALME:"realme",OPPO:"OPPO",IQOO:"iQOO"};
+
+function luhnDigit(s14){let t=0;for(let i=0;i<s14.length;i++){let d=+s14[i];if(i%2===1){d*=2;if(d>9)d-=9}t+=d}return (10-t%10)%10}
+function nice(w){
+  if(WORD_MAP[w.toUpperCase()]) return WORD_MAP[w.toUpperCase()];
+  if(w!==w.toUpperCase()||/\d/.test(w)||UPPER_KEEP.has(w)||w.length<=2) return w;
+  return w[0]+w.slice(1).toLowerCase();
+}
+const niceStr = s => s.split(/(\s+|-|\/)/).map(nice).join("");
+
+async function lookupTac(tac){
+  const k = tac.slice(0,3);
+  if(!shardCache.has(k)){
+    shardCache.set(k, fetch(`tac/${k}.json`).then(r=>r.ok?r.json():{}).catch(()=>null));
+  }
+  const shard = await shardCache.get(k);
+  if(shard===null){shardCache.delete(k);throw new Error("offline")}
+  return shard[tac] || null;
+}
+
+function parseSpecs(brand, specs){
+  let s = specs.trim(), year = null;
+  const ym = s.match(/((?:19|20)\d{2})\s*$/);
+  if(ym && +ym[1]>=1985 && +ym[1]<=2030){year = +ym[1]; s = s.slice(0, ym.index).replace(/[,\s]+$/,"")}
+  let parts = s.split(/\s*,\s*/).filter(Boolean);
+  const B = brand.toUpperCase();
+  let name = parts[0]||brand, rest = parts.slice(1);
+  if(name.toUpperCase()===B && rest.length){name = rest[0]; rest = rest.slice(1)}
+  let modelNo=null, region=null; const aliases=[];
+  const stripBrand = x => x.toUpperCase().startsWith(B+" ") ? x.slice(B.length+1) : x;
+  for(let p of rest){
+    const reg = p.match(/\(([^)]+)\)/);
+    if(/model|version|edition/i.test(p) && !/\d{3}/.test(p)){region = region||p; continue}
+    if(reg && !region) region = reg[1];
+    let q = stripBrand(p).replace(/\s*\([^)]*\)/,"").trim();
+    if(!q) continue;
+    const first = q.split(/\s+/)[0];
+    const codeLike = /\d/.test(first) && /[A-Z]/i.test(first) && first.length>=4;
+    if(!modelNo && codeLike && (q.split(/\s+/).length<=2)) modelNo = q;
+    else if(q.toUpperCase()!==stripBrand(name).toUpperCase()) aliases.push(q);
+  }
+  // Prefer a properly-cased alias that spells the same model
+  let display = name;
+  const plain = stripBrand(name).toUpperCase();
+  const match = rest.map(stripBrand).find(r=>r.toUpperCase()===plain && r!==r.toUpperCase());
+  display = match ? match : niceStr(stripBrand(name));
+  let al = aliases.filter(a=>a.toUpperCase()!==display.toUpperCase());
+  if(modelNo && display.toUpperCase()===modelNo.toUpperCase() && al.length){ display = niceStr(al[0]); al = al.slice(1) }
+  return {brand: niceStr(brand), model: display, modelNo, region, year, aliases: al};
+}
+
+function analyse(raw){
+  const d = (raw||"").replace(/\D/g,"");
+  const out = {input: raw, digits: d};
+  if(d.length===14){out.kind="IMEI (check digit calculated)"; out.imei = d + luhnDigit(d); out.valid = true; out.computed=true}
+  else if(d.length===15){out.kind="IMEI"; out.imei=d; out.valid = luhnDigit(d.slice(0,14))===+d[14]; out.expected = luhnDigit(d.slice(0,14))}
+  else if(d.length===16){out.kind="IMEISV (software version)"; out.imei = d.slice(0,14)+luhnDigit(d.slice(0,14)); out.svn = d.slice(14); out.valid = true; out.isSV = true}
+  else {out.error = d.length ? `That's ${d.length} digits. An IMEI has 15 digits (14 without the check digit, 16 for IMEISV).` : "Enter an IMEI to check."; return out}
+  out.tac = out.imei.slice(0,8); out.rbi = out.imei.slice(0,2); out.snr = out.imei.slice(8,14); out.cd = out.imei[14];
+  out.fac = out.imei.slice(6,8);
+  out.allSame = /^(\d)\1+$/.test(out.imei.slice(0,14));
+  return out;
+}
+
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function segHTML(label, digits, color, note){
+  return `<div class="seg" style="--c:var(${color})"><small>${label}</small><div class="digits">${[...digits].map(x=>`<b>${x}</b>`).join("")}</div><em>${note}</em></div>`;
+}
+
+function warrantyLinks(brandU, imei){
+  const L = [];
+  if(brandU==="APPLE") L.push(["Apple coverage check","checkcoverage.apple.com","https://checkcoverage.apple.com/"]);
+  if(brandU==="HUAWEI") L.push(["Huawei warranty query","consumer.huawei.com","https://consumer.huawei.com/en/support/warranty-query/"]);
+  const b = brandU ? niceStr(brandU) : "phone";
+  L.push([`Find the official ${b} warranty checker`,"web search",`https://www.google.com/search?q=${encodeURIComponent(b+" official warranty check IMEI")}`]);
+  L.push(["Blocked-phone check (Australian carriers)","isthisphoneblocked.net.au","https://www.isthisphoneblocked.net.au/"]);
+  return L.map(([t,s,u])=>`<a href="${u}" target="_blank" rel="noopener">${esc(t)}<span>${s} ↗</span></a>`).join("");
+}
+
+/* Apple 12-character serial (devices before 2021): 4th char = year/half, 5th = week */
+const AY="CDFGHJKLMNPQRSTVWXYZ", AW="123456789CDFGHJKLMNPQRTVWXY";
+function decodeAppleSerial(sn, releaseYear){
+  sn = sn.toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(sn.length===10) return {msg:"This is a newer randomized Apple serial (2021 onward). It does not encode a date; use Apple's coverage check, which shows the purchase date."};
+  if(sn.length!==12) return {msg:"Apple serials are 12 characters (older devices) or 10 characters (2021 onward)."};
+  const yi = AY.indexOf(sn[3]), wi = AW.indexOf(sn[4]);
+  if(yi<0||wi<0) return {msg:"This doesn't look like a valid Apple serial; check the 4th and 5th characters."};
+  const half = yi%2, base = 2010 + Math.floor(yi/2);
+  let year = base;
+  if(releaseYear && base+10 >= releaseYear && base < releaseYear) year = base+10;
+  const week = wi+1 + (half?26:0);
+  const d = new Date(Date.UTC(year,0,1 + (week-1)*7));
+  const mon = d.toLocaleString("en",{month:"long",timeZone:"UTC"});
+  return {ok:true, msg:`Made in week ${week} of ${year} (around ${mon} ${year}).`, year};
+}
+
+function deviceKey(r){ return r ? r : null }
+
+async function renderSingle(raw, save=true){
+  const box = $("#result");
+  const a = analyse(raw);
+  if(a.error){ box.innerHTML = `<div class="panel empty">${esc(a.error)}</div>`; return }
+  box.innerHTML = `<div class="panel empty">Looking up TAC ${a.tac}…</div>`;
+  let recs = null, offline = false;
+  try{ recs = await lookupTac(a.tac) }catch(e){ offline = true }
+  const dev = recs ? parseSpecs(recs[0][0], recs[0][1]) : null;
+  const brandU = recs ? recs[0][0].toUpperCase() : "";
+
+  let status;
+  if(a.allSame) status = `<span class="status warn">Placeholder number — not a real device</span>`;
+  else if(!a.valid) status = `<span class="status bad">Invalid — last digit should be ${a.expected}</span>`;
+  else if(a.computed) status = `<span class="status ok">Valid — check digit ${a.cd} added</span>`;
+  else status = `<span class="status ok">Valid checksum</span>`;
+
+  const strip = `<div class="strip">
+      ${segHTML("Issuer", a.rbi, "--seg-rbi", RBI[a.rbi] ? "Reporting body" : "Reporting body")}
+      ${segHTML("Model code (TAC rest)", a.tac.slice(2), "--seg-tac", "Identifies the model")}
+      ${segHTML("Serial number", a.snr, "--seg-snr", "Unique to this unit")}
+      ${segHTML("Check", a.cd, "--seg-cd", "Luhn digit")}
+      ${a.svn ? segHTML("SVN", a.svn, "--seg-rbi", "Software version") : ""}
+    </div>`;
+
+  let deviceHTML;
+  if(dev){
+    const rows = [
+      ["Brand", esc(dev.brand)],
+      ["Model", esc(dev.model)],
+      dev.modelNo ? ["Model number", `<span class="mono">${esc(dev.modelNo)}</span>`] : null,
+      dev.region ? ["Market / region", esc(dev.region)] : null,
+      ["Release year", dev.year ? `${dev.year}<span class="note">Year the model launched. This unit was made in or after ${dev.year}.</span>` : `<span class="note">Not listed for this model</span>`],
+      ["Manufacture date", brandU==="APPLE" ? `<span class="note">Enter the serial number on the right to decode it.</span>` : `<span class="note">Not stored in the IMEI. Check the box label or Settings › About phone.</span>`],
+      ["Warranty", `<span class="note">Held by the manufacturer only. Use the official checker on the right.</span>`],
+      dev.aliases.length ? ["Also listed as", esc(dev.aliases.join(" · "))] : null,
+    ].filter(Boolean);
+    deviceHTML = `<div class="brand">${esc(dev.brand)}</div><p class="model">${esc(dev.model)}</p>
+      <dl>${rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+      <div class="raw">TAC ${a.tac} → ${esc(recs[0][1])}</div>
+      ${recs.length>1 ? `<div class="alts">Other entries for this TAC: ${recs.slice(1).map(r=>esc(r[1])).join(" · ")}</div>`:""}`;
+  } else {
+    deviceHTML = `<h2>${offline ? "Couldn't load the device database" : "Model not in the database"}</h2>
+      <p class="hint">${offline ? "Check your connection and try again." : `TAC ${a.tac} isn't listed. The number may be mistyped, very new, or from a little-known maker. The breakdown above is still correct.`}</p>`;
+  }
+
+  const idRows = `<dl>
+      <dt>IMEI</dt><dd><span class="mono">${a.imei}</span></dd>
+      <dt>Type</dt><dd>${a.kind}</dd>
+      <dt>TAC</dt><dd><span class="mono">${a.tac}</span><span class="note">Type Allocation Code: first 8 digits, identifies brand and model</span></dd>
+      <dt>Serial (SNR)</dt><dd><span class="mono">${a.snr}</span><span class="note">Unit number assigned by the maker within this TAC</span></dd>
+      <dt>Check digit</dt><dd><span class="mono">${a.cd}</span></dd>
+      <dt>Issuing body</dt><dd>${esc(RBI[a.rbi] || "Unlisted issuer")} <span class="mono">(${a.rbi})</span></dd>
+      ${a.svn ? `<dt>Software version</dt><dd><span class="mono">${a.svn}</span></dd>`:""}
+    </dl>`;
+
+  box.innerHTML = `
+    <div class="panel label">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0">Decoded number</h2>${status}
+      </div>
+      ${strip}
+    </div>
+    <div class="grid2">
+      <div class="panel">${deviceHTML}</div>
+      <div class="side">
+        <div class="panel">
+          <h3>Warranty and status</h3>
+          <p>Warranty and blacklist data live with the manufacturer and carriers. These official pages check it free. Copy the IMEI first.</p>
+          <div class="links">${warrantyLinks(brandU, a.imei)}</div>
+          <button class="btn" type="button" id="copyImei" style="margin-top:10px;width:100%">Copy IMEI</button>
+        </div>
+        ${brandU==="APPLE" ? `<div class="panel serial">
+          <h3>Manufacture date from serial</h3>
+          <p>Find it in Settings › General › About, or on the box.</p>
+          <input id="sn" placeholder="e.g. F2LXK0ABHG7F" maxlength="14" autocomplete="off">
+          <output id="snOut"></output>
+        </div>` : ""}
+        <div class="panel"><h3>Identity</h3>${idRows}</div>
+      </div>
+    </div>`;
+
+  $("#copyImei").onclick = () => copy(a.imei, "IMEI copied");
+  const sn = $("#sn");
+  if(sn){ sn.oninput = () => { const v = sn.value.trim(); const r = v ? decodeAppleSerial(v, dev && dev.year) : null; $("#snOut").innerHTML = r ? `<span class="status ${r.ok?"ok":"warn"}">${esc(r.msg)}</span>` : ""; } }
+
+  if(save && a.valid && !a.allSame) remember(a.imei, dev ? dev.model : "Unknown model");
+}
+
+function remember(imei, label){
+  let h=[]; try{ h = JSON.parse(localStorage.getItem("imei-hist")||"[]") }catch(e){}
+  h = [{imei,label}, ...h.filter(x=>x.imei!==imei)].slice(0,8);
+  try{ localStorage.setItem("imei-hist", JSON.stringify(h)) }catch(e){}
+  drawHist(h);
+}
+function drawHist(h){
+  if(!h){ try{ h = JSON.parse(localStorage.getItem("imei-hist")||"[]") }catch(e){ h=[] } }
+  $("#histPanel").hidden = !h.length;
+  $("#hist").innerHTML = h.map(x=>`<button type="button" class="chip" data-s="${x.imei}" title="${esc(x.label)}">${x.imei} · ${esc(x.label)}</button>`).join("");
+}
+
+let toastT;
+function toast(msg){ let t=$(".toast"); if(!t){t=document.createElement("div");t.className="toast";t.setAttribute("role","status");document.body.appendChild(t)} t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,1800) }
+function copy(text, msg){
+  const fallback = () => { const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");toast(msg)}catch(e){toast("Select and copy manually")} ta.remove(); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(()=>toast(msg), fallback); else fallback();
+}
+
+/* Bulk */
+let lastCsv = "";
+async function runBulk(){
+  const items = $("#bulk").value.split(/[\s,;]+/).map(s=>s.trim()).filter(Boolean).slice(0,500);
+  if(!items.length){ $("#bulkOut").innerHTML = `<div class="panel empty">Paste at least one IMEI.</div>`; return }
+  $("#bulkInfo").textContent = `Checking ${items.length}…`;
+  const rows = [];
+  for(const it of items){
+    const a = analyse(it);
+    let dev=null, recs=null;
+    if(!a.error){ try{ recs = await lookupTac(a.tac) }catch(e){} dev = recs ? parseSpecs(recs[0][0], recs[0][1]) : null }
+    rows.push({a, dev});
+  }
+  const st = a => a.error ? ["bad","Wrong length"] : a.allSame ? ["warn","Placeholder"] : !a.valid ? ["bad","Bad checksum"] : ["ok","Valid"];
+  $("#bulkOut").innerHTML = `<div class="tablewrap"><table>
+    <thead><tr><th>IMEI</th><th>Status</th><th>Brand</th><th>Model</th><th>Model no.</th><th>Year</th><th>TAC</th><th>Serial</th></tr></thead>
+    <tbody>${rows.map(({a,dev})=>{const [c,t]=st(a);return `<tr>
+      <td class="mono">${esc(a.imei||a.digits||a.input)}</td>
+      <td><span class="status ${c}">${t}</span></td>
+      <td>${dev?esc(dev.brand):"—"}</td><td>${dev?esc(dev.model):(a.error?"—":"Not in database")}</td>
+      <td class="mono">${dev&&dev.modelNo?esc(dev.modelNo):"—"}</td><td class="mono">${dev&&dev.year||"—"}</td>
+      <td class="mono">${a.tac||"—"}</td><td class="mono">${a.snr||"—"}</td></tr>`}).join("")}</tbody></table></div>`;
+  const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
+  lastCsv = ["IMEI,Status,Brand,Model,Model number,Release year,TAC,Serial,Check digit"]
+    .concat(rows.map(({a,dev})=>[a.imei||a.input, st(a)[1], dev&&dev.brand, dev&&dev.model, dev&&dev.modelNo, dev&&dev.year, a.tac, a.snr, a.cd].map(q).join(","))).join("\n");
+  $("#copyCsv").disabled = false;
+  const okN = rows.filter(r=>!r.a.error && r.a.valid && !r.a.allSame).length;
+  $("#bulkInfo").textContent = `${okN} of ${rows.length} valid · ${rows.filter(r=>r.dev).length} identified`;
+}
+
+/* Wiring */
+function tab(which){
+  const single = which==="single";
+  $("#tab-single").setAttribute("aria-selected", single); $("#tab-bulk").setAttribute("aria-selected", !single);
+  $("#view-single").hidden = !single; $("#view-bulk").hidden = single;
+  if(!single && !$("#bulkOut").innerHTML) runBulk();
+}
+$("#tab-single").onclick = () => tab("single");
+$("#tab-bulk").onclick = () => tab("bulk");
+$("#form").onsubmit = e => { e.preventDefault(); renderSingle($("#imei").value) };
+$("#imei").addEventListener("input", e => { const v=e.target.value.replace(/\D/g,""); if(v.length===15) renderSingle(v) });
+document.addEventListener("click", e => { const c = e.target.closest(".chip[data-s]"); if(c){ $("#imei").value = c.dataset.s; tab("single"); renderSingle(c.dataset.s); window.scrollTo({top:0,behavior:"smooth"}) } });
+$("#runBulk").onclick = runBulk;
+$("#copyCsv").onclick = () => copy(lastCsv, "CSV copied — paste into Excel or Sheets");
+
+drawHist();
+$("#imei").value = "358330275123908";
+renderSingle("358330275123908", false);
+</script>
+
+</html>
